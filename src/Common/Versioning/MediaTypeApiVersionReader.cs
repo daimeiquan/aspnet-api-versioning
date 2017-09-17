@@ -20,7 +20,7 @@ namespace Microsoft.AspNetCore.Mvc.Versioning
 #else
     using MediaTypeWithQualityHeaderValue = Microsoft.Net.Http.Headers.MediaTypeHeaderValue;
 #endif
-
+    using static ApiVersionParameterLocation;
 
     /// <summary>
     /// Represents a service API version reader that reads the value from a media type HTTP header in the request.
@@ -86,10 +86,17 @@ namespace Microsoft.AspNetCore.Mvc.Versioning
                 {
                     foreach ( var parameter in entry.Parameters )
                     {
+#if WEBAPI
                         if ( comparer.Equals( parameter.Name, ParameterName ) )
                         {
                             return parameter.Value;
                         }
+#else
+                        if ( comparer.Equals( parameter.Name.Value, ParameterName ) )
+                        {
+                            return parameter.Value.Value;
+                        }
+#endif
                     }
                 }
             }
@@ -110,13 +117,30 @@ namespace Microsoft.AspNetCore.Mvc.Versioning
 
             foreach ( var parameter in contentType.Parameters )
             {
+#if WEBAPI
                 if ( comparer.Equals( parameter.Name, ParameterName ) )
                 {
                     return parameter.Value;
                 }
+#else
+                if ( comparer.Equals( parameter.Name.Value, ParameterName ) )
+                {
+                    return parameter.Value.Value;
+                }
+#endif
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Provides API version parameter descriptions supported by the current reader using the supplied provider.
+        /// </summary>
+        /// <param name="context">The <see cref="IApiVersionParameterDescriptionContext">context</see> used to add API version parameter descriptions.</param>
+        public virtual void AddParmeters( IApiVersionParameterDescriptionContext context )
+        {
+            Arg.NotNull( context, nameof( context ) );
+            context.AddParameter( ParameterName, MediaTypeParameter );
         }
     }
 }

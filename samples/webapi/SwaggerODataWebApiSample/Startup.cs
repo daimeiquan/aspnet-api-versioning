@@ -47,7 +47,8 @@ namespace Microsoft.Examples
             configuration.MapVersionedODataRoutes( "odata-bypath", "api/v{apiVersion}", models, ConfigureODataServices );
 
             // add the versioned IApiExplorer and capture the strongly-typed implementation (e.g. ODataApiExplorer vs IApiExplorer)
-            var apiExplorer = configuration.AddODataApiExplorer();
+            // note: the specified format code will format the version as "'v'major[.minor][-status]"
+            var apiExplorer = configuration.AddODataApiExplorer( o => o.GroupNameFormat = "'v'VVV" );
 
             configuration.EnableSwagger(
                            "{apiVersion}/swagger",
@@ -60,7 +61,6 @@ namespace Microsoft.Examples
                                   {
                                       foreach ( var group in apiExplorer.ApiDescriptions )
                                       {
-                                          var apiVersion = group.ApiVersion;
                                           var description = "A sample application with Swagger, Swashbuckle, OData, and API versioning.";
 
                                           if ( group.IsDeprecated )
@@ -68,7 +68,7 @@ namespace Microsoft.Examples
                                               description += " This API version has been deprecated.";
                                           }
 
-                                          info.Version( apiExplorer.GetGroupName( apiVersion ), $"Sample API {apiVersion}" )
+                                          info.Version( group.Name, $"Sample API {group.ApiVersion}" )
                                               .Contact( c => c.Name( "Bill Mei" ).Email( "bill.mei@somewhere.com" ) )
                                               .Description( description )
                                               .License( l => l.Name( "MIT" ).Url( "https://opensource.org/licenses/MIT" ) )
@@ -77,7 +77,7 @@ namespace Microsoft.Examples
                                   } );
 
                                // add a custom operation filter which documents the implicit API version parameter
-                               swagger.OperationFilter<ImplicitApiVersionParameter>();
+                               swagger.OperationFilter<SwaggerDefaultValues>();
 
                                // integrate xml comments
                                swagger.IncludeXmlComments( XmlCommentsFilePath );

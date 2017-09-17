@@ -125,11 +125,29 @@ namespace Microsoft.AspNetCore.Mvc {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to An action invoker could not be created for action &apos;{0}&apos;..
+        /// </summary>
+        internal static string CouldNotCreateInvoker {
+            get {
+                return ResourceManager.GetString("CouldNotCreateInvoker", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to The expression &apos;{0}&apos; must refer to a controller action method..
         /// </summary>
         internal static string InvalidActionMethodExpression {
             get {
                 return ResourceManager.GetString("InvalidActionMethodExpression", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Input string was not in a correct format..
+        /// </summary>
+        internal static string InvalidFormatString {
+            get {
+                return ResourceManager.GetString("InvalidFormatString", resourceCulture);
             }
         }
         
@@ -148,6 +166,15 @@ namespace Microsoft.AspNetCore.Mvc {
         internal static string VersionedResourceNotSupported {
             get {
                 return ResourceManager.GetString("VersionedResourceNotSupported", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to The HTTP resource that matches the request URI &apos;{0}&apos; is not supported..
+        /// </summary>
+        internal static string VersionNeutralResourceNotSupported {
+            get {
+                return ResourceManager.GetString("VersionNeutralResourceNotSupported", resourceCulture);
             }
         }
         

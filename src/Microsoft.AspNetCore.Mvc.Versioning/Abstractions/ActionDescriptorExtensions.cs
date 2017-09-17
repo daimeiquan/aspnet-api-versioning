@@ -2,6 +2,7 @@
 {
     using ApplicationModels;
     using System;
+    using System.Collections.Generic;
     using System.Diagnostics.Contracts;
     using System.Linq;
     using Versioning;
@@ -12,28 +13,28 @@
     [CLSCompliant( false )]
     public static class ActionDescriptorExtensions
     {
-        const string VersionsAggregated = "MS_" + nameof( HasAggregatedVersions );
+        const string VersionPolicyIsAppliedKey = "MS_" + nameof( VersionPolicyIsApplied );
 
-        static bool HasAggregatedVersions( this ActionDescriptor action ) => action.Properties.GetOrDefault( VersionsAggregated, false );
+        static void VersionPolicyIsApplied( this ActionDescriptor action, bool value ) => action.Properties[VersionPolicyIsAppliedKey] = value;
 
-        static void HasAggregatedVersions( this ActionDescriptor action, bool value ) => action.Properties[VersionsAggregated] = value;
+        internal static bool VersionPolicyIsApplied( this ActionDescriptor action ) => action.Properties.GetOrDefault( VersionPolicyIsAppliedKey, false );
 
-        internal static void AggregateAllVersions( this ActionDescriptor action, ActionSelectionContext context )
+        internal static void AggregateAllVersions( this ActionDescriptor action, IEnumerable<ActionDescriptor> matchingActions )
         {
             Contract.Requires( action != null );
-            Contract.Requires( context != null );
+            Contract.Requires( matchingActions != null );
 
-            if ( action.HasAggregatedVersions() )
+            if ( action.VersionPolicyIsApplied() )
             {
                 return;
             }
 
-            action.HasAggregatedVersions( true );
+            action.VersionPolicyIsApplied( true );
 
             var model = action.GetProperty<ApiVersionModel>();
             Contract.Assume( model != null );
 
-            action.SetProperty( model.Aggregate( context.AllVersions ) );
+            action.SetProperty( model.Aggregate( matchingActions.Select( a => a.GetProperty<ApiVersionModel>() ).Where( m => m != null ) ) );
         }
 
         /// <summary>

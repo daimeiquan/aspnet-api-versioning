@@ -139,14 +139,23 @@
   <data name="ApiVersionUnspecified" xml:space="preserve">
     <value>An API version is required, but was not specified.</value>
   </data>
+  <data name="CouldNotCreateInvoker" xml:space="preserve">
+    <value>An action invoker could not be created for action '{0}'.</value>
+  </data>
   <data name="InvalidActionMethodExpression" xml:space="preserve">
     <value>The expression '{0}' must refer to a controller action method.</value>
+  </data>
+  <data name="InvalidFormatString" xml:space="preserve">
+    <value>Input string was not in a correct format.</value>
   </data>
   <data name="MultipleDifferentApiVersionsRequested" xml:space="preserve">
     <value>The following API versions were requested: {0}. At most, only a single API version may be specified. Please update the intended API version and retry the request.</value>
   </data>
   <data name="VersionedResourceNotSupported" xml:space="preserve">
     <value>The HTTP resource that matches the request URI '{0}' does not support the API version '{1}'.</value>
+  </data>
+  <data name="VersionNeutralResourceNotSupported" xml:space="preserve">
+    <value>The HTTP resource that matches the request URI '{0}' is not supported.</value>
   </data>
   <data name="ZeroApiVersionReaders" xml:space="preserve">
     <value>At least one IApiVersionReader must be specified.</value>

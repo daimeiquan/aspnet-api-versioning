@@ -5,6 +5,8 @@
     using AspNetCore.Mvc.Routing;
     using AspNetCore.Mvc.Versioning;
     using Extensions;
+    using Microsoft.AspNetCore.Builder;
+    using Microsoft.AspNetCore.Hosting;
     using Options;
     using System;
     using System.Diagnostics.Contracts;
@@ -39,28 +41,47 @@
             setupAction( options );
             services.Add( new ServiceDescriptor( typeof( IApiVersionReader ), options.ApiVersionReader ) );
             services.Add( new ServiceDescriptor( typeof( IApiVersionSelector ), options.ApiVersionSelector ) );
+            services.Add( new ServiceDescriptor( typeof( IErrorResponseProvider ), options.ErrorResponses ) );
             services.Add( Singleton<IOptions<ApiVersioningOptions>>( new OptionsWrapper<ApiVersioningOptions>( options ) ) );
             services.Replace( Singleton<IActionSelector, ApiVersionActionSelector>() );
+            services.TryAddSingleton<IApiVersionRoutePolicy, DefaultApiVersionRoutePolicy>();
+            services.AddTransient<IStartupFilter, InjectApiVersionRoutePolicy>();
+            services.AddMvcCore( mvcOptions => AddMvcOptions( mvcOptions, options ) );
+            services.AddRouting( routeOptions => routeOptions.ConstraintMap.Add( "apiVersion", typeof( ApiVersionRouteConstraint ) ) );
+
+            return services;
+        }
+
+        static void AddMvcOptions( MvcOptions mvcOptions, ApiVersioningOptions options )
+        {
+            Contract.Requires( mvcOptions != null );
+            Contract.Requires( options != null );
 
             if ( options.ReportApiVersions )
             {
-                services.AddSingleton<ReportApiVersionsAttribute>();
+                mvcOptions.Filters.Add( new ReportApiVersionsAttribute() );
             }
 
-            services.AddMvcCore(
-                mvcOptions =>
+            mvcOptions.Conventions.Add( new ApiVersionConvention( options.DefaultApiVersion, options.Conventions ) );
+        }
+
+        sealed class InjectApiVersionRoutePolicy : IStartupFilter
+        {
+            readonly IApiVersionRoutePolicy routePolicy;
+
+            public InjectApiVersionRoutePolicy( IApiVersionRoutePolicy routePolicy ) => this.routePolicy = routePolicy;
+
+            public Action<IApplicationBuilder> Configure( Action<IApplicationBuilder> next )
+            {
+                Contract.Requires( next != null );
+                Contract.Ensures( Contract.Result<Action<IApplicationBuilder>>() != null );
+
+                return app =>
                 {
-                    if ( options.ReportApiVersions )
-                    {
-                        mvcOptions.Filters.Add( typeof( ReportApiVersionsAttribute ) );
-                    }
-
-                    mvcOptions.Conventions.Add( new ApiVersionConvention( options.DefaultApiVersion, options.Conventions ) );
-                } );
-
-            services.AddRouting( mvcOptions => mvcOptions.ConstraintMap.Add( "apiVersion", typeof( ApiVersionRouteConstraint ) ) );
-
-            return services;
+                    next( app );
+                    app.UseRouter( builder => builder.Routes.Add( routePolicy ) );
+                };
+            }
         }
     }
 }

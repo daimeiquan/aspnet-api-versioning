@@ -3,6 +3,8 @@
     using FluentAssertions;
     using Microsoft.AspNetCore.Mvc.ModelBinding;
     using Microsoft.AspNetCore.Mvc.ModelBinding.Metadata;
+    using Microsoft.AspNetCore.Mvc.Versioning;
+    using Microsoft.Extensions.Options;
     using Moq;
     using System.Collections.Generic;
     using Xunit;
@@ -15,9 +17,9 @@
             // arrange
             var actionProvider = new TestActionDescriptorCollectionProvider();
             var context = new ApiDescriptionProviderContext( actionProvider.ActionDescriptors.Items );
-            var groupNameFormatter = new DefaultApiVersionGroupNameFormatter();
             var modelMetadataProvider = NewModelMetadataProvider();
-            var apiExplorer = new VersionedApiDescriptionProvider( groupNameFormatter, modelMetadataProvider );
+            var apiExplorerOptions = new OptionsWrapper<ApiExplorerOptions>( new ApiExplorerOptions() { GroupNameFormat = "'v'VVV" } );
+            var apiExplorer = new VersionedApiDescriptionProvider( modelMetadataProvider, apiExplorerOptions );
 
             foreach ( var action in context.Actions )
             {

@@ -32,7 +32,8 @@ namespace Microsoft.Examples
             configuration.MapHttpAttributeRoutes( constraintResolver );
 
             // add the versioned IApiExplorer and capture the strongly-typed implementation (e.g. VersionedApiExplorer vs IApiExplorer)
-            var apiExplorer = configuration.AddVersionedApiExplorer();
+            // note: the specified format code will format the version as "'v'major[.minor][-status]"
+            var apiExplorer = configuration.AddVersionedApiExplorer( o => o.GroupNameFormat = "'v'VVV" );
 
             configuration.EnableSwagger(
                             "{apiVersion}/swagger",
@@ -45,7 +46,6 @@ namespace Microsoft.Examples
                                     {
                                         foreach ( var group in apiExplorer.ApiDescriptions )
                                         {
-                                            var apiVersion = group.ApiVersion;
                                             var description = "A sample application with Swagger, Swashbuckle, and API versioning.";
 
                                             if ( group.IsDeprecated )
@@ -53,17 +53,16 @@ namespace Microsoft.Examples
                                                 description += " This API version has been deprecated.";
                                             }
 
-                                            info.Version( apiExplorer.GetGroupName( apiVersion ), $"Sample API {apiVersion}" )
+                                            info.Version( group.Name, $"Sample API {group.ApiVersion}" )
                                                 .Contact( c => c.Name( "Bill Mei" ).Email( "bill.mei@somewhere.com" ) )
                                                 .Description( description )
                                                 .License( l => l.Name( "MIT" ).Url( "https://opensource.org/licenses/MIT" ) )
                                                 .TermsOfService( "Shareware" );
                                         }
                                     } );
-
-
-                                // add a custom operation filter which documents the implicit API version parameter
-                                swagger.OperationFilter<ImplicitApiVersionParameter>();
+                                
+                                // add a custom operation filter which sets default values
+                                swagger.OperationFilter<SwaggerDefaultValues>();
 
                                 // integrate xml comments
                                 swagger.IncludeXmlComments( XmlCommentsFilePath );

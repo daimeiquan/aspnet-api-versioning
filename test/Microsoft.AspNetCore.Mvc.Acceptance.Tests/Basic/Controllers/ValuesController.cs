@@ -9,5 +9,11 @@
     {
         [HttpGet]
         public IActionResult Get() => Ok( new { Controller = nameof( ValuesController ), Version = HttpContext.GetRequestedApiVersion().ToString() } );
+
+        [HttpGet( "{id}" )]
+        public IActionResult Get( string id ) => Ok( new { Controller = nameof( ValuesController ), Id = id, Version = HttpContext.GetRequestedApiVersion().ToString() } );
+
+        [HttpGet( "search" )]
+        public IActionResult Search( string query ) => Ok( new { Controller = nameof( ValuesController ), Query = query, Version = HttpContext.GetRequestedApiVersion().ToString() } );
     }
 }

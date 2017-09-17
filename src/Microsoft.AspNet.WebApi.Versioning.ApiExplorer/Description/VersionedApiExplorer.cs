@@ -1,6 +1,5 @@
 ﻿namespace Microsoft.Web.Http.Description
 {
-    using Microsoft.Web.Http.Versioning;
     using Routing;
     using System;
     using System.Collections;
@@ -38,11 +37,20 @@
         /// Initializes a new instance of the <see cref="VersionedApiExplorer"/> class.
         /// </summary>
         /// <param name="configuration">The current <see cref="HttpConfiguration">HTTP configuration</see>.</param>
-        public VersionedApiExplorer( HttpConfiguration configuration )
+        public VersionedApiExplorer( HttpConfiguration configuration ) : this( configuration, new ApiExplorerOptions( configuration ) ) { }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="VersionedApiExplorer"/> class.
+        /// </summary>
+        /// <param name="configuration">The current <see cref="HttpConfiguration">HTTP configuration</see>.</param>
+        /// <param name="options">The associated <see cref="ApiExplorerOptions">API explorer options</see>.</param>
+        public VersionedApiExplorer( HttpConfiguration configuration, ApiExplorerOptions options )
         {
             Arg.NotNull( configuration, nameof( configuration ) );
+            Arg.NotNull( options, nameof( options ) );
 
             Configuration = configuration;
+            Options = options;
             apiDescriptions = new Lazy<ApiDescriptionGroupCollection>( InitializeApiDescriptions );
         }
 
@@ -53,10 +61,10 @@
         protected HttpConfiguration Configuration { get; }
 
         /// <summary>
-        /// Gets the current API versioning options associated with the API explorer.
+        /// Gets the options associated with the API explorer.
         /// </summary>
-        /// <value>The current <see cref="ApiVersioningOptions">API versioning options</see>.</value>
-        protected virtual ApiVersioningOptions Options => Configuration.GetApiVersioningOptions();
+        /// <value>The <see cref="ApiExplorerOptions">API explorer options</see>.</value>
+        protected virtual ApiExplorerOptions Options { get; }
 
         /// <summary>
         /// Gets the comparer used to compare API descriptions.
@@ -133,14 +141,18 @@
 
             if ( ( setting == null || !setting.IgnoreApi ) && MatchRegexConstraint( route, RouteValueKeys.Action, actionRouteParameterValue ) )
             {
-                var versions = actionDescriptor.GetApiVersions();
+                var model = actionDescriptor.GetApiVersionModel();
 
-                if ( versions.Contains( apiVersion ) )
+                if ( model.IsApiVersionNeutral || model.DeclaredApiVersions.Contains( apiVersion ) )
                 {
                     return true;
                 }
 
-                return versions.Count == 0 && actionDescriptor.ControllerDescriptor.GetDeclaredApiVersions().Contains( apiVersion );
+                if ( model.DeclaredApiVersions.Count == 0 )
+                {
+                    model = actionDescriptor.ControllerDescriptor.GetApiVersionModel();
+                    return model.IsApiVersionNeutral || model.DeclaredApiVersions.Contains( apiVersion );
+                }
             }
 
             return false;
@@ -164,7 +176,8 @@
 
             if ( ( setting == null || !setting.IgnoreApi ) && MatchRegexConstraint( route, RouteValueKeys.Controller, controllerRouteParameterValue ) )
             {
-                return controllerDescriptor.GetDeclaredApiVersions().Contains( apiVersion );
+                var model = controllerDescriptor.GetApiVersionModel();
+                return model.IsApiVersionNeutral || model.DeclaredApiVersions.Contains( apiVersion );
             }
 
             return false;
@@ -175,57 +188,12 @@
         /// </summary>
         /// <param name="apiVersion">The <see cref="ApiVersion">API version</see> to retrieve a group name for.</param>
         /// <returns>The group name for the specified <paramref name="apiVersion">API version</paramref>.</returns>
-        public virtual string GetGroupName( ApiVersion apiVersion )
+        protected virtual string GetGroupName( ApiVersion apiVersion )
         {
             Arg.NotNull( apiVersion, nameof( apiVersion ) );
             Contract.Ensures( !IsNullOrEmpty( Contract.Result<string>() ) );
 
-            var format = new StringBuilder();
-            var formatProvider = InvariantCulture;
-
-            if ( apiVersion.GroupVersion == null )
-            {
-                format.Append( 'v' );
-                format.Append( apiVersion.MajorVersion ?? 0 );
-
-                if ( apiVersion.MinorVersion != null && apiVersion.MinorVersion.Value > 0 )
-                {
-                    format.Append( '.' );
-                    format.Append( apiVersion.MinorVersion );
-                }
-            }
-            else
-            {
-                format.Append( apiVersion.GroupVersion.Value.ToString( "yyyy-MM-dd", formatProvider ) );
-
-                if ( apiVersion.MajorVersion == null )
-                {
-                    if ( apiVersion.MinorVersion != null )
-                    {
-                        format.Append( "-0." );
-                        format.Append( apiVersion.MinorVersion.Value );
-                    }
-                }
-                else
-                {
-                    format.Append( '-' );
-                    format.Append( apiVersion.MajorVersion.Value );
-
-                    if ( apiVersion.MinorVersion != null && apiVersion.MinorVersion.Value > 0 )
-                    {
-                        format.Append( '.' );
-                        format.Append( apiVersion.MinorVersion.Value );
-                    }
-                }
-            }
-
-            if ( !IsNullOrEmpty( apiVersion.Status ) )
-            {
-                format.Append( '-' );
-                format.Append( apiVersion.Status );
-            }
-
-            return format.ToString();
+            return apiVersion.ToString( Options.GroupNameFormat, InvariantCulture );
         }
 
         /// <summary>
@@ -263,17 +231,31 @@
 
                     // Remove ApiDescription that will lead to ambiguous action matching.
                     // E.g. a controller with Post() and PostComment(). When the route template is {controller}, it produces POST /controller and POST /controller.
-                    descriptionsFromRoute = RemoveInvalidApiDescriptions( descriptionsFromRoute );
+                    descriptionsFromRoute = RemoveInvalidApiDescriptions( descriptionsFromRoute, apiVersion );
 
                     foreach ( var description in descriptionsFromRoute )
                     {
                         // Do not add the description if the previous route has a matching description with the same HTTP method and relative path.
                         // E.g. having two routes with the templates "api/Values/{id}" and "api/{controller}/{id}" can potentially produce the same
                         // relative path "api/Values/{id}" but only the first one matters.
-                        if ( !apiDescriptionGroup.ApiDescriptions.Contains( description, Comparer ) )
+
+                        var index = apiDescriptionGroup.ApiDescriptions.IndexOf( description, Comparer );
+
+                        if ( index < 0 )
                         {
                             description.GroupName = apiDescriptionGroup.Name;
                             apiDescriptionGroup.ApiDescriptions.Add( description );
+                        }
+                        else
+                        {
+                            var model = description.ActionDescriptor.GetApiVersionModel();
+                            var overrideImplicitlyMappedApiDescription = model.DeclaredApiVersions.Contains( apiVersion );
+
+                            if ( overrideImplicitlyMappedApiDescription )
+                            {
+                                description.GroupName = apiDescriptionGroup.Name;
+                                apiDescriptionGroup.ApiDescriptions[index] = description;
+                            }
                         }
                     }
 
@@ -441,7 +423,7 @@
             var assembliesResolver = services.GetAssembliesResolver();
             var typeResolver = services.GetHttpControllerTypeResolver();
             var controllerTypes = typeResolver.GetControllerTypes( assembliesResolver );
-            var options = Options;
+            var options = Configuration.GetApiVersioningOptions();
             var declared = new HashSet<ApiVersion>();
             var supported = new HashSet<ApiVersion>();
             var deprecated = new HashSet<ApiVersion>();
@@ -478,8 +460,15 @@
             advertisedDeprecated.ExceptWith( declared );
             supported.ExceptWith( advertisedSupported );
             deprecated.ExceptWith( supported.Concat( advertisedDeprecated ) );
+            supported.UnionWith( deprecated );
 
-            return supported.Union( deprecated ).OrderBy( v => v );
+            if ( supported.Count == 0 )
+            {
+                supported.Add( options.DefaultApiVersion );
+                return supported;
+            }
+
+            return supported.OrderBy( v => v );
         }
 
         static HttpControllerDescriptor GetDirectRouteController( CandidateAction[] directRouteCandidates, ApiVersion apiVersion )
@@ -636,6 +625,22 @@
             return apiDescriptions;
         }
 
+        /// <summary>
+        /// Populates the API version parameters for the specified API description.
+        /// </summary>
+        /// <param name="apiDescription">The <see cref="ApiDescription">API description</see> to populate parameters for.</param>
+        /// <param name="apiVersion">The <see cref="ApiVersion">API version</see> used to populate parameters with.</param>
+        protected virtual void PopulateApiVersionParameters( ApiDescription apiDescription, ApiVersion apiVersion )
+        {
+            Arg.NotNull( apiDescription, nameof( apiDescription ) );
+            Arg.NotNull( apiVersion, nameof( apiVersion ) );
+
+            var parameterSource = Options.ApiVersionParameterSource;
+            var context = new ApiVersionParameterDescriptionContext( apiDescription, apiVersion, Options );
+
+            parameterSource.AddParmeters( context );
+        }
+
         void ExploreRouteActions(
             IHttpRoute route,
             string localPath,
@@ -769,6 +774,7 @@
                 apiDescription.SupportedResponseFormatters.AddRange( supportedResponseFormatters );
                 apiDescription.SupportedRequestBodyFormatters.AddRange( supportedRequestBodyFormatters );
                 apiDescription.ParameterDescriptions.AddRange( parameterDescriptions );
+                PopulateApiVersionParameters( apiDescription, apiVersion );
                 apiDescriptions.Add( apiDescription );
             }
         }
@@ -957,41 +963,34 @@
             return parameterDescription;
         }
 
-        static Collection<VersionedApiDescription> RemoveInvalidApiDescriptions( Collection<VersionedApiDescription> apiDescriptions )
+        static Collection<VersionedApiDescription> RemoveInvalidApiDescriptions( Collection<VersionedApiDescription> apiDescriptions, ApiVersion apiVersion )
         {
             Contract.Requires( apiDescriptions != null );
+            Contract.Requires( apiVersion != null );
             Contract.Ensures( Contract.Result<Collection<VersionedApiDescription>>() != null );
 
-            var duplicateApiDescriptionIds = new HashSet<string>( StringComparer.OrdinalIgnoreCase );
-            var visitedApiDescriptionIds = new HashSet<string>( StringComparer.OrdinalIgnoreCase );
+            var filteredDescriptions = new Dictionary<string, VersionedApiDescription>( StringComparer.OrdinalIgnoreCase );
 
             foreach ( var description in apiDescriptions )
             {
                 var apiDescriptionId = description.GetUniqueID();
 
-                if ( visitedApiDescriptionIds.Contains( apiDescriptionId ) )
+                if ( filteredDescriptions.ContainsKey( apiDescriptionId ) )
                 {
-                    duplicateApiDescriptionIds.Add( apiDescriptionId );
+                    var model = description.ActionDescriptor.GetApiVersionModel();
+
+                    if ( model.DeclaredApiVersions.Contains( apiVersion ) )
+                    {
+                        filteredDescriptions[apiDescriptionId] = description;
+                    }
                 }
                 else
                 {
-                    visitedApiDescriptionIds.Add( apiDescriptionId );
+                    filteredDescriptions.Add( apiDescriptionId, description );
                 }
             }
 
-            var filteredApiDescriptions = new Collection<VersionedApiDescription>();
-
-            foreach ( var apiDescription in apiDescriptions )
-            {
-                var apiDescriptionId = apiDescription.GetUniqueID();
-
-                if ( !duplicateApiDescriptionIds.Contains( apiDescriptionId ) )
-                {
-                    filteredApiDescriptions.Add( apiDescription );
-                }
-            }
-
-            return filteredApiDescriptions;
+            return new Collection<VersionedApiDescription>( filteredDescriptions.Values.ToList() );
         }
 
         static bool MatchRegexConstraint( IHttpRoute route, string parameterName, string parameterValue )
